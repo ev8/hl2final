@@ -115,7 +115,7 @@ enum Class_T
 	CLASS_EARTH_FAUNA,
 	CLASS_HACKED_ROLLERMINE,
 	CLASS_COMBINE_HUNTER,
-	ClASS_ITEM,// ev8 added to help robobro distingish  distinguis item entities
+
 
 	NUM_AI_CLASSES
 };

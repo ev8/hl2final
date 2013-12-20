@@ -1,6 +1,6 @@
 //ev8 this is the entity class for my robot helper
 #include "cbase.h"
- 
+
 class CRobobro : public CBaseAnimating
 {
 public:
@@ -9,21 +9,23 @@ public:
  
 	CRobobro()
 	{
-		m_bActive = false;
+		m_bfetching= false;
 	}
 	//simple boiler plate entity declarations
 	void Spawn( void );
 	void Precache( void );
 	void Activate(void);
 	void MoveThink( void );
- 
+	void UseFunc( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	// Input function
 	void InputToggle( inputdata_t &inputData );
  
 private:
  
-	bool	m_bActive;
+	bool	m_bfetching;
 	float	m_flNextChangeTime;
+	float	m_flNextshootTime;
+	CBaseEntity *target;
 };
  
 LINK_ENTITY_TO_CLASS( Robro, CRobobro );
@@ -32,15 +34,19 @@ LINK_ENTITY_TO_CLASS( Robro, CRobobro );
 BEGIN_DATADESC( CRobobro )
  
 	// Save/restore our active state
-	DEFINE_FIELD( m_bActive, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_bfetching, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_flNextChangeTime, FIELD_TIME ),
+	DEFINE_FIELD( m_flNextshootTime, FIELD_TIME ),
+
  
 	// Links our input name from Hammer to our input member function
 	DEFINE_INPUTFUNC( FIELD_VOID, "Toggle", InputToggle ),
  
 	// Declare our think function
 	DEFINE_THINKFUNC( MoveThink ),
- 
+	DEFINE_USEFUNC( UseFunc ),
+	
+	
 END_DATADESC()
  
 // Name of our entity's model
@@ -50,6 +56,7 @@ END_DATADESC()
 // Purpose: Precache assets used by the entity
 //-----------------------------------------------------------------------------
 //ev8 loads the model, i'll add sounds later
+
 void CRobobro::Precache( void )
 {
 	PrecacheModel( ENTITY_MODEL );
@@ -81,6 +88,7 @@ void CRobobro::Precache( void )
 	UseClientSideAnimation();
 	SetThink( &CRobobro::MoveThink );
 	SetNextThink( gpGlobals->curtime + 0.05f );
+	SetUse( &CRobobro::Use );
  
 		// Start moving
 		SetMoveType( MOVETYPE_FLY );
@@ -90,16 +98,36 @@ void CRobobro::Precache( void )
 }
  
 //-----------------------------------------------------------------------------
-// Purpose: Think function to randomly move the entity
+
 //-----------------------------------------------------------------------------
-// ev8 my think function that make robobro follow the player that spawned him
+// ev8 this is the use function that would allow the player to interact with robobro but i'm haveing some inheritence issues trying accessing emmeber functions of base player class
+ void CRobobro::UseFunc( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{	
+	if (pActivator->IsPlayer()){
+	CBasePlayer *pPlayer = (CBasePlayer *)this->GetOwnerEntity() ;
+		
+	CBaseCombatWeapon *pWeapon = pPlayer->GetActiveWeapon();
+	//ev8 now i have a reference to the weapon robobro will store, i'd store this localy and then remove the weapon from the player
+	//pPlayer->Weapon_DropPrimary();
+	// unfortunately this function is broken, as in  it's in the engine but valve itself acknowledges that it dosen't work.
+	//i can't really find a work around because of the way items and weapons are handled in source
+	}
+}
+// ev8 this is robobro's think function, it handles  deciding where robobro is going, what he is doing and who he is attacking
 void CRobobro::MoveThink( void )
 {
 	
-	Vector	vTargetDir;
-	VectorSubtract( this->GetOwnerEntity()->GetAbsOrigin(), GetAbsOrigin(), vTargetDir );
+	float distance = GetAbsOrigin().DistTo( this->GetOwnerEntity()->WorldSpaceCenter());
+	CBaseEntity *pEntity = NULL;
+	if (distance<300){//checks to make sure robobro is close enough to the player to do helpfulsyuff
+	for ( CEntitySphereQuery sphere( GetAbsOrigin(), 50 ); ( pEntity = sphere.GetCurrentEntity() ) != NULL; sphere.NextEntity() )
+	{
+		if ( pEntity->Classify() == CLASS_NONE )// ev8 added this flag to health and ammor crates but apparent it's also used on all the prop items so i need to find a way of identifying items
+		{
+			Vector	vTargetDir;
+			VectorSubtract( pEntity->GetAbsOrigin(), GetAbsOrigin(), vTargetDir );
 	Vector	vDir	= GetAbsVelocity();
-	float	flSpeed	= VectorNormalize( vDir );
+	
 	Vector	vNewVelocity = vDir;
 	
 	
@@ -109,10 +137,36 @@ void CRobobro::MoveThink( void )
 	QAngle	finalAngles;
 	VectorAngles( vNewVelocity, finalAngles );
 	SetAbsAngles( finalAngles );
+		Vector vecForward; 
+	AngleVectors( GetLocalAngles(), &vecForward );
+	SetAbsVelocity( vecForward * 10 );
+			//chase item to get for player
+			break;
+		}else if ( pEntity->m_takedamage != DAMAGE_NO && pEntity->Classify() != CLASS_PLAYER){//ev8 only way i could find to check for a possible target
+			// attack code goes here
+		}
+		
+	}
 
-	vNewVelocity *= flSpeed;
-	SetAbsVelocity( vNewVelocity );
- 
+	}else{// to far away chase player
+		Vector	vTargetDir;
+	VectorSubtract( this->GetOwnerEntity()->GetAbsOrigin(), GetAbsOrigin(), vTargetDir );
+	Vector	vDir	= GetAbsVelocity();
+	
+	Vector	vNewVelocity = vDir;
+	
+	
+			vNewVelocity = vTargetDir;
+	
+
+	QAngle	finalAngles;
+	VectorAngles( vNewVelocity, finalAngles );
+	SetAbsAngles( finalAngles );
+		Vector vecForward; 
+	AngleVectors( GetLocalAngles(), &vecForward );
+	SetAbsVelocity( vecForward * 200 );
+	
+	}
 	// Think every 20Hz
 	SetNextThink( gpGlobals->curtime + 0.05f );
 }
@@ -122,34 +176,7 @@ void CRobobro::MoveThink( void )
 //-----------------------------------------------------------------------------
 void CRobobro::InputToggle( inputdata_t &inputData )
 {
-	/*// Toggle our active state
-	if ( !m_bActive )
-	{
-		// Start thinking
-		SetThink( &CRobobro::MoveThink );
- 
-		SetNextThink( gpGlobals->curtime + 0.05f );
- 
-		// Start moving
-		SetMoveType( MOVETYPE_FLY );
- 
-		// Force MoveThink() to choose a new speed and direction immediately
-		m_flNextChangeTime = gpGlobals->curtime;
- 
-		// Update m_bActive to reflect our new state
-		m_bActive = true;
-	}
-	else
-	{
-		// Stop thinking
-		SetThink( NULL );
- 
-		// Stop moving
-		SetAbsVelocity( vec3_origin );
- 		SetMoveType( MOVETYPE_NONE );
- 
-		m_bActive = false;
-	}*/
+	
 }
 
 // ev8 a console command to spawn robobro, i'll move the spaning code to the player spawn code later, so the player and robobro spawn simultaniuly.
